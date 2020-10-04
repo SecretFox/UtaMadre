@@ -5,55 +5,92 @@ import com.GameInterface.VicinitySystem;
 import com.GameInterface.WaypointInterface;
 import com.Utils.Archive;
 import com.Utils.ID32;
+import flash.geom.Point;
 
 var m_Character:Character
 
-var m_PUTA:UtaBar;
-var m_CUTA:UtaBar;
-var m_DUTA:UtaBar;
+var m_RUTA:UtaBar;
+var m_BUTA:UtaBar;
+var m_SUTA:UtaBar;
+var rPos:DistributedValue;
+var sPos:DistributedValue;
+var bPos:DistributedValue;
+var rS:DistributedValue;
+var bS:DistributedValue;
+var sS:DistributedValue;
+var m_loaded:Boolean;
 
 var m_ID:Array;
 
+function UtaMadre()
+{
+
+}
+
+function onLoad() 
+{
+	rPos = DistributedValue.Create( "UtaMadre_RiflePos" );
+	sPos = DistributedValue.Create( "UtaMadre_SwordPos" );	
+	bPos = DistributedValue.Create( "UtaMadre_BloodPos" );
+	
+	rS = DistributedValue.Create( "UtaMadre_RifleScale" );
+	bS = DistributedValue.Create( "UtaMadre_BloodScale" );
+	sS = DistributedValue.Create( "UtaMadre_SwordScale" );
+	WaypointInterface.SignalPlayfieldChanged.Connect(SlotPlayfieldChanged, this);
+	m_Character = Character.GetClientCharacter();
+}
+
+function onUnload() 
+{
+	WaypointInterface.SignalPlayfieldChanged.Disconnect(SlotPlayfieldChanged, this);
+}
+
 function OnModuleActivated(config:Archive)
 {
-	var pX:DistributedValue = DistributedValue.Create( "PutaX" );
-	var pY:DistributedValue = DistributedValue.Create( "PutaY" );	
-	var dX:DistributedValue = DistributedValue.Create( "DutaX" );
-	var dY:DistributedValue = DistributedValue.Create( "DutaY" );	
-	var cX:DistributedValue = DistributedValue.Create( "CutaX" );
-	var cY:DistributedValue = DistributedValue.Create( "CutaY" );	
-	
-	var pS:DistributedValue = DistributedValue.Create( "PutaScale" );
-	var dS:DistributedValue = DistributedValue.Create( "DutaScale" );
-	var cS:DistributedValue = DistributedValue.Create( "CutaScale" );
-	
-	m_PUTA._x = pX.GetValue();
-	m_PUTA._y = pY.GetValue();
-	m_PUTA._xscale = m_PUTA._yscale = pS.GetValue();
-	
-	m_DUTA._x = dX.GetValue();
-	m_DUTA._y = dY.GetValue();
-	m_DUTA._xscale = m_DUTA._yscale = dS.GetValue();
-	
-	m_CUTA._x = cX.GetValue();
-	m_CUTA._y = cY.GetValue();
-	m_CUTA._xscale = m_CUTA._yscale = cS.GetValue();
-	
-	WaypointInterface.SignalPlayfieldChanged.Connect(SlotPlayfieldChanged, this);
-	
-	m_Character = Character.GetClientCharacter();
-	SlotPlayfieldChanged(m_Character.GetPlayfieldID());
+	if(!m_loaded)
+	{
+		rPos.SetValue(config.FindEntry("RiflePos", new Point(15,270)));
+		bPos.SetValue(config.FindEntry("BloodPos", new Point(15,165)));
+		sPos.SetValue(config.FindEntry("SwordPos", new Point(15,60)));
+		rs.SetValue(config.FindEntry("RifleScale", 100));
+		bS.SetValue(config.FindEntry("BloodScale", 100));
+		sS.SetValue(config.FindEntry("SwordScale", 100));
+		m_RUTA._x = rPos.GetValue().x;
+		m_RUTA._y = rPos.GetValue().y;
+		m_RUTA._xscale = m_RUTA._yscale = rs.GetValue();
+		
+		m_BUTA._x = bPos.GetValue().x;
+		m_BUTA._y = bPos.GetValue().y;
+		m_BUTA._xscale = m_BUTA._yscale = bS.GetValue();
+		
+		m_SUTA._x = sPos.GetValue().x;
+		m_SUTA._y = sPos.GetValue().y;
+		m_SUTA._xscale = m_SUTA._yscale = sS.GetValue();
+		m_loaded = true;
+		
+		SlotPlayfieldChanged(m_Character.GetPlayfieldID());
+	}
 }
 
 function OnModuleDeactivated()
 {
-	
+	var config:Archive = new Archive();
+	config.AddEntry("RiflePos",rPos.GetValue());
+	config.AddEntry("BloodPos",bPos.GetValue());
+	config.AddEntry("SwordPos",sPos.GetValue());
+	config.AddEntry("RifleScale",RifleutaScale.GetValue());
+	config.AddEntry("BloodScale",BloodutaScale.GetValue());
+	config.AddEntry("SwordScale",SwordutaScale.GetValue());
+	return config;
 }
 
 function SlotPlayfieldChanged(newPlayfield:Number)
 {
-	// 6892: PH Elite & NM
-	EnableAddon(newPlayfield == 6892);
+	if(m_loaded)
+	{
+		// 6892: PH Elite & NM
+		EnableAddon(newPlayfield == 6892);
+	}
 }
 
 function EnableAddon(enabled:Boolean)
@@ -77,9 +114,9 @@ function EnableAddon(enabled:Boolean)
 
 function ResetTargets()
 {
-	m_PUTA.SetUta(null);
-	m_DUTA.SetUta(null);
-	m_CUTA.SetUta(null);
+	m_RUTA.SetUta(null);
+	m_BUTA.SetUta(null);
+	m_SUTA.SetUta(null);
 	
 	m_ID = new Array();
 }
@@ -87,6 +124,7 @@ function ResetTargets()
 function SlotOffensiveTargetChanged(targetId:ID32)
 {
 	var target:Character = Character.GetCharacter(targetId);
+	
 	if (target.GetName() != "Uta")
 		return;
 	
@@ -96,22 +134,20 @@ function SlotOffensiveTargetChanged(targetId:ID32)
 	else
 		return;
 	
-	var HasPink:Boolean = target.GetStat(_global.Enums.Stat.e_CurrentPinkShield, 2) != 0;
-	var HasBlue:Boolean = target.GetStat(_global.Enums.Stat.e_CurrentBlueShield, 2) != 0;
-	var HasRed:Boolean = target.GetStat(_global.Enums.Stat.e_CurrentRedShield, 2) != 0;
+	var HasBlood:Boolean = target.GetStat(112) == 35794;
+	var HasSword:Boolean = target.GetStat(112) == 35793;
+	var HasRifle:Boolean = target.GetStat(112) == 35795;
 	
-	if (HasBlue)
+	if (HasSword)
 	{
-		m_CUTA.SetUta(target, 0x004D87);
+		m_SUTA.SetUta(target, 0xE607EB);
 	}
-	else if (HasPink)
+	else if (HasRifle)
 	{
-		
-		m_PUTA.SetUta(target, 0x870087)
+		m_RUTA.SetUta(target, 0x004D87)
 	}
-	else if (HasRed)
+	else if (HasBlood)
 	{
-		
-		m_DUTA.SetUta(target, 0x851100)
+		m_BUTA.SetUta(target, 0x851100)
 	}
 }

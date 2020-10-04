@@ -7,6 +7,7 @@ import com.GameInterface.Targeting;
 import com.GameInterface.Utils;
 import com.Utils.Colors;
 import com.Utils.ID32;
+import flash.geom.Point;
 import gfx.core.UIComponent;
 import mx.utils.Delegate;
 import com.Components.BuffCharge;
@@ -41,9 +42,9 @@ class UtaBar extends UIComponent
 	{
 		super();
 		
-		if (_name == "m_PUTA") m_UtaType = "P";
-		else if (_name == "m_DUTA") m_UtaType = "D";
-		else if (_name == "m_CUTA") m_UtaType = "C";
+		if (_name == "m_RUTA") m_UtaType = "Rifle";
+		else if (_name == "m_BUTA") m_UtaType = "Blood";
+		else if (_name == "m_SUTA") m_UtaType = "Sword";
 		
 		m_Character = Character.GetClientCharacter();
 		m_Character.SignalOffensiveTargetChanged.Connect(SlotOffensiveTargetChanged, this);
@@ -250,7 +251,7 @@ class UtaBar extends UIComponent
 		
 		m_HealthBar.m_Background._xscale = percHP;
 		m_HealthBar.m_Text.text = currentHP + " / " + maxHP + " ("+Math.ceil(percHP)+"%)";
-		
+		/*
 		var shieldHP:Number = m_Uta.GetStat(_global.Enums.Stat.e_CurrentPinkShield, 2)
 			+ m_Uta.GetStat(_global.Enums.Stat.e_CurrentBlueShield, 2)
 			+ m_Uta.GetStat(_global.Enums.Stat.e_CurrentRedShield, 2);
@@ -264,6 +265,7 @@ class UtaBar extends UIComponent
 		if (shieldHP > 0)
 			m_ShieldBar.m_Text.text = shieldHP + " / " + maxShieldHP + " (" + Math.ceil(percShieldHP) + "%)";
 		else
+		*/
 			m_ShieldBar.m_Text.text = m_UtaType + "-Uta";
 	}
 	
@@ -279,7 +281,7 @@ class UtaBar extends UIComponent
 			LayoutEditModeMask();
 			this.onMouseWheel = function( delta:Number )
 			{
-				var scaleDV:DistributedValue = DistributedValue.Create(m_UtaType + "utaScale");
+				var scaleDV:DistributedValue = DistributedValue.Create(m_UtaType + "Scale");
 				var scale:Number = scaleDV.GetValue();
 				scale = Math.min(200, Math.max(50, scale));
 				scaleDV.SetValue(scale + delta);
@@ -307,11 +309,8 @@ class UtaBar extends UIComponent
 		
 		this.stopDrag();
 		
-		var X:DistributedValue = DistributedValue.Create( m_UtaType + "utaX" );
-		var Y:DistributedValue = DistributedValue.Create( m_UtaType + "utaY" );	
-		
-		X.SetValue(this._x);
-		Y.SetValue(this._y);	
+		var dVal:DistributedValue = DistributedValue.Create( "UtaMadre_" + m_UtaType + "Pos" );
+		dVal.SetValue(new Point(this._x, this._y));	
 
 	}
 
