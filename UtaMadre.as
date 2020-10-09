@@ -1,13 +1,18 @@
-﻿import com.GameInterface.Chat;
+﻿import com.GameInterface.AccountManagement;
+import com.GameInterface.Chat;
 import com.GameInterface.DistributedValue;
 import com.GameInterface.Game.Character;
 import com.GameInterface.Game.Dynel;
+import com.GameInterface.Nametags;
 import com.GameInterface.VicinitySystem;
 import com.GameInterface.WaypointInterface;
 import com.Utils.Archive;
 import com.Utils.ID32;
+import com.Utils.LDBFormat;
+import com.Utils.SignalGroup;
 import com.Utils.WeakList;
 import flash.geom.Point;
+import mx.utils.Delegate;
 
 var m_Character:Character
 
@@ -20,17 +25,21 @@ var bPos:DistributedValue;
 var rS:DistributedValue;
 var bS:DistributedValue;
 var sS:DistributedValue;
+var TrackHE:DistributedValue;
 var m_loaded:Boolean;
+var m_Enabled:Boolean;
 
-var m_ID:Array;
+var m_signals:SignalGroup;
 
-function UtaMadre()
-{
-
-}
+var Uta:String = LDBFormat.LDBGetText(51000,35793);
+var Brutus:String = LDBFormat.LDBGetText(51000,36931);
+var Cassius:String = LDBFormat.LDBGetText(51000,36932);
+var Iscariot:String = LDBFormat.LDBGetText(51000,36933);
 
 function onLoad() 
 {
+	m_signals = new SignalGroup();
+	m_Character = UtaBar.m_Character = Character.GetClientCharacter();
 	rPos = DistributedValue.Create( "UtaMadre_RiflePos" );
 	sPos = DistributedValue.Create( "UtaMadre_SwordPos" );	
 	bPos = DistributedValue.Create( "UtaMadre_BloodPos" );
@@ -38,25 +47,28 @@ function onLoad()
 	rS = DistributedValue.Create( "UtaMadre_RifleScale" );
 	bS = DistributedValue.Create( "UtaMadre_BloodScale" );
 	sS = DistributedValue.Create( "UtaMadre_SwordScale" );
+	TrackHE = DistributedValue.Create( "UtaMadre_TrackHE" );
 	WaypointInterface.SignalPlayfieldChanged.Connect(SlotPlayfieldChanged, this);
-	m_Character = Character.GetClientCharacter();
 }
 
 function onUnload() 
 {
 	WaypointInterface.SignalPlayfieldChanged.Disconnect(SlotPlayfieldChanged, this);
+	EnableAddon(false);
 }
 
 function OnModuleActivated(config:Archive)
 {
 	if(!m_loaded)
 	{
-		rPos.SetValue(config.FindEntry("RiflePos", new Point(15,270)));
-		bPos.SetValue(config.FindEntry("BloodPos", new Point(15,165)));
-		sPos.SetValue(config.FindEntry("SwordPos", new Point(15,60)));
+		sPos.SetValue(config.FindEntry("SwordPos", new Point(15, 60)));
+		bPos.SetValue(config.FindEntry("BloodPos", new Point(15, 165)));
+		rPos.SetValue(config.FindEntry("RiflePos", new Point(15, 270)));
+		
 		rS.SetValue(config.FindEntry("RifleScale", 100));
 		bS.SetValue(config.FindEntry("BloodScale", 100));
 		sS.SetValue(config.FindEntry("SwordScale", 100));
+		TrackHE.SetValue(config.FindEntry("TrackHE", false));
 		m_RUTA._x = rPos.GetValue().x;
 		m_RUTA._y = rPos.GetValue().y;
 		m_RUTA._xscale = m_RUTA._yscale = rS.GetValue();
@@ -82,41 +94,56 @@ function OnModuleDeactivated()
 	config.AddEntry("SwordPos",sPos.GetValue());
 	config.AddEntry("RifleScale",rS.GetValue());
 	config.AddEntry("BloodScale",bS.GetValue());
-	config.AddEntry("SwordScale",sS.GetValue());
+	config.AddEntry("SwordScale", sS.GetValue());
+	config.AddEntry("TrackHE",TrackHE.GetValue());
 	return config;
 }
 
 function SlotPlayfieldChanged(newPlayfield:Number)
 {
+	if (AccountManagement.GetInstance().GetLoginState() != _global.Enums.LoginState.e_LoginStateInPlay){
+		setTimeout(Delegate.create(this, SlotPlayfieldChanged), 1000, newPlayfield);
+		return
+	}
 	if(m_loaded)
 	{
 		// 6892: PH Elite & NM
-		EnableAddon(newPlayfield == 6892);
+		switch(newPlayfield)
+		{
+			case 6892: // PH,nametags
+				setTimeout(Delegate.create(this, EnableAddon), 1000, true, true);
+				return
+			case 5160 && TrackHE.GetValue():
+				setTimeout(Delegate.create(this, EnableAddon), 1000, true, false);
+				return
+			default:
+				EnableAddon(false),
+		}
 	}
 }
 
-function EnableAddon(enabled:Boolean)
+function EnableAddon(enabled:Boolean, nametags:Boolean)
 {
+	m_signals.DisconnectAll();
+	ResetTargets();
+	UtaBar.m_Enabled = enabled;
 	if (enabled)
 	{
 		// to detect utas
-		m_Character.SignalCharacterDied.Connect(ResetTargets, this);
-		m_Character.SignalOffensiveTargetChanged.Connect(SlotOffensiveTargetChanged, this);
-		VicinitySystem.SignalDynelEnterVicinity.Connect(SlotOffensiveTargetChanged, this);
+		m_Character.SignalCharacterDied.Connect(m_signals, ResetTargets, this);
+		m_Character.SignalOffensiveTargetChanged.Connect(m_signals, SlotOffensiveTargetChanged, this);
+		if (nametags){
+			Nametags.SignalNametagAdded.Connect(m_signals, SlotOffensiveTargetChanged, this);
+			Nametags.RefreshNametags();
+		}
+		VicinitySystem.SignalDynelEnterVicinity.Connect(m_signals, SlotOffensiveTargetChanged, this);
+		
 		var ls:WeakList = Dynel.s_DynelList
 		for (var num = 0; num < ls.GetLength(); num++) {
 			var dyn:Character = ls.GetObject(num);
-			SlotOffensiveTargetChanged(dyn.GetID());
+			if(dyn.GetDistanceToPlayer() < 50) SlotOffensiveTargetChanged(dyn.GetID());
 		}
 	}
-	else
-	{
-		m_Character.SignalCharacterDied.Disconnect(ResetTargets, this);
-		m_Character.SignalOffensiveTargetChanged.Disconnect(SlotOffensiveTargetChanged, this);
-		VicinitySystem.SignalDynelEnterVicinity.Disconnect(SlotOffensiveTargetChanged, this);
-	}
-	
-	ResetTargets();
 }
 
 function ResetTargets()
@@ -124,37 +151,53 @@ function ResetTargets()
 	m_RUTA.SetUta(null);
 	m_BUTA.SetUta(null);
 	m_SUTA.SetUta(null);
-	
-	m_ID = new Array();
 }
 
 function SlotOffensiveTargetChanged(targetId:ID32)
 {
+	if (targetId.IsNull()) return;
 	var target:Character = Character.GetCharacter(targetId);
+	if (!target) return;
 	
-	if (target.GetName() != "Uta")
-		return;
-	
-	// ID -> Type: 50000 - Instance: xxxxx
-	if (m_ID.length < 3 && !targetId.Equal(m_ID[0]) && !targetId.Equal(m_ID[1]))
-		m_ID.push(targetId);
-	else
-		return;
-	
-	var HasBlood:Boolean = target.GetStat(112) == 35794;
-	var HasSword:Boolean = target.GetStat(112) == 35793;
-	var HasRifle:Boolean = target.GetStat(112) == 35795;
-	
-	if (HasSword)
-	{
-		m_SUTA.SetUta(target, 0xE607EB);
-	}
-	else if (HasRifle)
-	{
-		m_RUTA.SetUta(target, 0x004D87)
-	}
-	else if (HasBlood)
-	{
-		m_BUTA.SetUta(target, 0x851100)
+	switch(target.GetName()){
+		case Uta:
+			var stat = target.GetStat(112);
+			var HasSword:Boolean = (stat == 35793 || stat == 35694);
+			var HasRifle:Boolean = (stat == 35795 || stat == 35695);
+			var HasBlood:Boolean = (stat == 35794 || stat == 35693);
+			if (HasSword && !m_SUTA.GetUtaID().Equal(targetId))
+			{
+				m_SUTA.SetUta(target, 0xE607EB, "Blade-Uta");
+			}
+			else if (HasBlood && !m_BUTA.GetUtaID().Equal(targetId))
+			{
+				m_BUTA.SetUta(target, 0x851100, "Blood-Uta")
+			}
+			else if (HasRifle && !m_RUTA.GetUtaID().Equal(targetId))
+			{
+				m_RUTA.SetUta(target, 0x004D87, "Rifle-Uta")
+			}
+			//UtilsBase.PrintChatText("Uta " + target.GetStat(112) + " " + Math.floor(target.GetPosition().x) + " , " + Math.floor(target.GetPosition().z)); 
+			return
+		case Brutus:
+			if (!m_SUTA.GetUtaID().Equal(targetId))
+			{
+				m_SUTA.SetUta(target, undefined, Brutus);
+			}
+			return
+		case Cassius:
+			if (!m_BUTA.GetUtaID().Equal(targetId))
+			{
+				m_BUTA.SetUta(target, undefined, Cassius);
+			}
+			return
+		case Iscariot:
+			if (!m_RUTA.GetUtaID().Equal(targetId))
+			{
+				m_RUTA.SetUta(target, undefined, Iscariot);
+			}
+			return
+		default:
+			return
 	}
 }
