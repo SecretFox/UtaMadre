@@ -3,7 +3,7 @@
   <Module  name = "UtaMadre"
     movie       = "UtaMadre\UtaMadre.swf"
     flags       = "GMF_CFG_STORE_USER_CONFIG | GMF_DONT_UNLOAD"
-    depth_layer = "Top"
+    depth_layer = "Middle"
     sub_depth   = "2"
     variable    = "UtaMadre"
     criteria    = "UtaMadre &amp;&amp; (guimode &amp; (GUIMODEFLAGS_INPLAY | GUIMODEFLAGS_ENABLEALLGUI))"

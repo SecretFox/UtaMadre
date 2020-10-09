@@ -4,16 +4,19 @@ import com.GameInterface.Game.BuffData;
 import com.GameInterface.Game.Character;
 import com.GameInterface.Game.TargetingInterface;
 import com.GameInterface.Targeting;
-import com.GameInterface.Utils;
 import com.Utils.Colors;
 import com.Utils.ID32;
+import com.Utils.LDBFormat;
+import com.Utils.SignalGroup;
 import flash.geom.Point;
 import gfx.core.UIComponent;
 import mx.utils.Delegate;
+import flash.geom.ColorTransform;
 import com.Components.BuffCharge;
 
 class UtaBar extends UIComponent
 {
+	static var m_Enabled:Boolean;
 	private var m_HealthBar:MovieClip;
 	private var m_ShieldBar:MovieClip;
 	private var m_CastBar:MovieClip;
@@ -25,8 +28,8 @@ class UtaBar extends UIComponent
 	private var m_Border:MovieClip;
 	
 	private var m_Uta:Character;
-	private var m_Character:Character;
 	private var m_UtaType:String;
+	private var NameOverride:String;
 	
 	private var m_EditModeMask:MovieClip;
 	
@@ -35,18 +38,23 @@ class UtaBar extends UIComponent
 	private var m_TotalFrames:Number; 
 	private var m_StopFrame:Number;
 	private var m_ProgressBarType:Number;
+	private var m_Signals:SignalGroup;
 
 	private var m_MovieClipLoader:MovieClipLoader;
+	private var m_BlinkInterval:Number;
+	
+	static var DANGEROUSCASTS = [LDBFormat.LDBGetText(50210, 8963975), LDBFormat.LDBGetText(50210, 9114429)];
+	static var SOUNDCASTS = [LDBFormat.LDBGetText(50210, 8974889)];
+	static var SisterlyBonds = LDBFormat.LDBGetText(50210, 8963983);
+	static var m_Character:Character;
 	
 	public function UtaBar()
 	{
 		super();
-		
+		m_Signals = new SignalGroup();
 		if (_name == "m_RUTA") m_UtaType = "Rifle";
 		else if (_name == "m_BUTA") m_UtaType = "Blood";
 		else if (_name == "m_SUTA") m_UtaType = "Sword";
-		
-		m_Character = Character.GetClientCharacter();
 		m_Character.SignalOffensiveTargetChanged.Connect(SlotOffensiveTargetChanged, this);
 		
 		m_MovieClipLoader = new MovieClipLoader();
@@ -94,54 +102,44 @@ class UtaBar extends UIComponent
 			SlotEditMaskPressed();
 			return;
 		}
-			
 		TargetingInterface.SetTarget(m_Uta.GetID());
 	}
 	
 	public function GetUtaID():ID32
 	{
-		return m_Uta.GetID();
+		return m_Uta.GetID() || new ID32();
 	}
-	public function SetUta(uta:Character, shieldColor:Number)
+	public function SetUta(uta:Character, shieldColor:Number, nameOverride:String)
 	{
-		if (m_Uta != null)
-		{
-			m_Uta.SignalStatChanged.Disconnect(SlotStatChanged, this);
-			m_Uta.SignalCommandStarted.Disconnect( SlotSignalCommandStarted, this);
-			m_Uta.SignalCommandEnded.Disconnect( SlotSignalCommandEnded, this);
-			m_Uta.SignalCommandAborted.Disconnect( SlotSignalCommandAborted, this);
-			
-			m_Uta.SignalBuffAdded.Disconnect(SlotBuffChange, this);
-			m_Uta.SignalBuffRemoved.Disconnect(SlotBuffChange, this);
-			m_Uta.SignalBuffUpdated.Disconnect(SlotBuffChange, this);
-			
-			m_Uta.SignalCharacterDied.Disconnect(SlotDeath, this);
-		}
+		m_Signals.DisconnectAll();
+		clearInterval(m_IntervalId);
+		clearInterval(m_BlinkInterval);
 		
 		m_Uta = uta;
-		
+		_visible = (m_Uta != null);
 		if (m_Uta != null)
 		{
-			m_Uta.SignalStatChanged.Connect(SlotStatChanged, this);
-			m_Uta.SignalCommandStarted.Connect( SlotSignalCommandStarted, this);
-			m_Uta.SignalCommandEnded.Connect( SlotSignalCommandEnded, this);
-			m_Uta.SignalCommandAborted.Connect( SlotSignalCommandAborted, this);
+			m_CastBar.m_ProgressBar.transform.colorTransform = new ColorTransform();
+			if (shieldColor) Colors.ApplyColor(m_ShieldBar.m_Background, shieldColor);
+			else Colors.ApplyColor(m_ShieldBar.m_Background, 0x993300);
+			if (nameOverride) NameOverride = nameOverride;
+			else NameOverride = m_Uta.GetName()
+			m_CastBar._visible = false;
+			m_Uta.SignalStatChanged.Connect(m_Signals, SlotStatChanged, this);
+			m_Uta.SignalCommandStarted.Connect(m_Signals, SlotSignalCommandStarted, this);
+			m_Uta.SignalCommandEnded.Connect(m_Signals, SlotSignalCommandEnded, this);
+			m_Uta.SignalCommandAborted.Connect(m_Signals, SlotSignalCommandAborted, this);
+			m_Uta.ConnectToCommandQueue();
 			
-			m_Uta.SignalBuffAdded.Connect(SlotBuffChange, this);
-			m_Uta.SignalBuffRemoved.Connect(SlotBuffChange, this);
-			m_Uta.SignalBuffUpdated.Connect(SlotBuffChange, this);
+			m_Uta.SignalBuffAdded.Connect(m_Signals, SlotBuffChange, this);
+			m_Uta.SignalBuffRemoved.Connect(m_Signals, SlotBuffChange, this);
+			m_Uta.SignalBuffUpdated.Connect(m_Signals, SlotBuffChange, this);
 			
-			m_Uta.SignalCharacterDied.Connect(SlotDeath, this);
+			m_Uta.SignalCharacterDied.Connect(m_Signals, SlotDeath, this);
+			SlotStatChanged();
+			SlotOffensiveTargetChanged(m_Uta.GetID());
+			SlotBuffChange();
 		}
-		
-		Colors.ApplyColor(m_ShieldBar.m_Background, shieldColor);
-		
-		SlotStatChanged();
-		SlotOffensiveTargetChanged(m_Uta.GetID());
-		SlotBuffChange();
-		
-		_visible = (m_Uta != null);
-		m_CastBar._visible = false;
 	}
 	
 	private function SlotDeath()
@@ -157,20 +155,45 @@ class UtaBar extends UIComponent
 		{
 			clearInterval(m_IntervalId);
 		}
-
 		m_CastBar.m_ProgressBar.gotoAndStop( m_StopFrame );
 		m_IntervalId = setInterval( Delegate.create( this, ExecuteCallback ), m_Increments );
 		
 		m_CastBar.m_Text.text = name;
 		
 		m_CastBar._visible = true;
+		for (var i in DANGEROUSCASTS){
+			if (DANGEROUSCASTS[i] == name){
+				clearInterval(m_BlinkInterval);
+				var colorTransform:ColorTransform = new ColorTransform();
+				colorTransform.rgb = 0xFFFFFF;
+				m_CastBar.m_ProgressBar.transform.colorTransform = colorTransform;
+				var increment = 20;		
+				m_BlinkInterval = setInterval(Delegate.create(this,function(){
+					if (colorTransform.greenOffset >= 255) increment = -20;
+					if (colorTransform.greenOffset <= 0) increment = 20;
+					colorTransform.greenOffset += increment;
+					colorTransform.blueOffset += increment;
+					this.m_CastBar.m_ProgressBar.transform.colorTransform = colorTransform;
+				}), 50);
+				return;
+			}
+		}
+		for (var i in SOUNDCASTS){
+			if (SOUNDCASTS[i] == name){
+				clearInterval(m_BlinkInterval);
+				m_CastBar.m_ProgressBar.transform.colorTransform = new ColorTransform();
+				m_BlinkInterval = setInterval(Delegate.create(this, function(){
+					m_Character.AddEffectPackage("sound_fxpackage_beep_single.xml");
+				}), 200);
+				return;
+			}
+		}
 	}
 	private function ExecuteCallback(): Void
 	{
-		if (m_Uta != undefined)
+		if (m_Uta != null)
 		{
 			var scaleNum:Number = Math.min( Math.round( m_Uta.GetCommandProgress() * m_TotalFrames ), m_TotalFrames);
-
 			if (m_ProgressBarType == _global.Enums.CommandProgressbarType.e_CommandProgressbar_Empty)
 			{
 				scaleNum = m_TotalFrames - scaleNum;
@@ -181,15 +204,17 @@ class UtaBar extends UIComponent
 	private function SlotSignalCommandEnded() : Void
 	{
 		clearInterval( m_IntervalId );
+		clearInterval(m_BlinkInterval);
+		m_CastBar.m_ProgressBar.transform.colorTransform = new ColorTransform();
 		m_CastBar._visible = false;
 		m_CastBar.m_ProgressBar.stop();
 	}
 
 	private function SlotSignalCommandAborted() : Void
 	{
-		//clearInterval( m_IntervalId );
-		//m_CastBar._visible = false;
-		
+		clearInterval( m_IntervalId );
+		clearInterval(m_BlinkInterval);
+        m_CastBar.m_ProgressBar.transform.colorTransform = new ColorTransform();
 		m_CastBar.m_Text.text = "Interrupted!";
 		_global['setTimeout'](this, 'SlotSignalCommandEnded', 500);
 	}
@@ -199,25 +224,18 @@ class UtaBar extends UIComponent
 		for (var buffId in m_Uta.m_BuffList)
 		{
 			var buff:BuffData = m_Uta.m_BuffList[buffId];
-			if (buff.m_BuffId == 8963983 || buff.m_Name == "Sisterly Bonds") // Sisterly Bonds
+			if (buff.m_Name == SisterlyBonds) // localized
 			{
 				if(buff.m_Icon != undefined && m_BuffCharge == undefined) {
 					this.attachMovie( "_BuffCharge", "m_BuffCharge", this.getNextHighestDepth() );
-
 					m_BuffCharge.SetMax( buff.m_MaxCounters );
 					m_BuffCharge.SetColor( 0x0000ff );
-
-					//m_BuffCharge._x = 28;
-					//m_BuffCharge._y = 80;
-					
 					m_BuffCharge._xscale = m_BuffCharge._yscale = 160;
 					m_BuffCharge._x = 25;
 					m_BuffCharge._y = 79;
 				}
 				
 				m_BuffCharge.SetCharge( Math.max(1, buff.m_Count) );
-				
-				
 				
 				switch(buff.m_Count)
 				{
@@ -240,7 +258,7 @@ class UtaBar extends UIComponent
 			}
 		}
 		
-		m_SisterlyBonds.text = "?";
+		m_SisterlyBonds.text = "?";//?
 	}
 	
 	private function SlotStatChanged()
@@ -250,30 +268,16 @@ class UtaBar extends UIComponent
 		var percHP = 100 * currentHP / maxHP;
 		
 		m_HealthBar.m_Background._xscale = percHP;
-		m_HealthBar.m_Text.text = currentHP + " / " + maxHP + " ("+Math.ceil(percHP)+"%)";
-		/*
-		var shieldHP:Number = m_Uta.GetStat(_global.Enums.Stat.e_CurrentPinkShield, 2)
-			+ m_Uta.GetStat(_global.Enums.Stat.e_CurrentBlueShield, 2)
-			+ m_Uta.GetStat(_global.Enums.Stat.e_CurrentRedShield, 2);
-		var maxShieldHP:Number = m_Uta.GetStat(_global.Enums.Stat.e_AbsolutePinkShield, 2)
-			+ m_Uta.GetStat(_global.Enums.Stat.e_AbsoluteBlueShield, 2)
-			+ m_Uta.GetStat(_global.Enums.Stat.e_AbsoluteRedShield, 2);
-		var percShieldHP = 100 * shieldHP / maxShieldHP;
-		
-		m_ShieldBar.m_Background._xscale = percShieldHP;
-		
-		if (shieldHP > 0)
-			m_ShieldBar.m_Text.text = shieldHP + " / " + maxShieldHP + " (" + Math.ceil(percShieldHP) + "%)";
-		else
-		*/
-			m_ShieldBar.m_Text.text = m_UtaType + "-Uta";
+		m_HealthBar.m_Text.text = currentHP + " / " + maxHP + " (" + Math.ceil(percHP) + "%)";
+		m_ShieldBar.m_Text.text = NameOverride;
+		if (m_Uta.IsDead()) SetUta(null);
 	}
 	
 	
 	// GUI EDIT MODE
 	private function SlotSetGUIEditMode(edit:Boolean)
 	{	
-		edit = edit && (m_Character.GetPlayfieldID() == 6892);
+		edit = edit && m_Enabled;
 		
 		m_EditModeMask._visible = edit;
 		if (edit)
@@ -304,8 +308,7 @@ class UtaBar extends UIComponent
 
 	private function SlotEditMaskReleased()
 	{
-		if (!m_EditModeMask._visible)
-			return;
+		if (!m_EditModeMask._visible) return;
 		
 		this.stopDrag();
 		
@@ -317,7 +320,6 @@ class UtaBar extends UIComponent
 	private function LayoutEditModeMask()
 	{
 		_visible = true;
-			
 		m_EditModeMask._x = - 5;
 		m_EditModeMask._y = - 5;
 		m_EditModeMask._width = m_Border._width + 10;
