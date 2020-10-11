@@ -113,9 +113,11 @@ function SlotPlayfieldChanged(newPlayfield:Number)
 			case 6892: // PH,nametags
 				setTimeout(Delegate.create(this, EnableAddon), 1000, true, true);
 				return
-			case 5160 && TrackHE.GetValue():
-				setTimeout(Delegate.create(this, EnableAddon), 1000, true, false);
-				return
+			case 5160:
+				if (TrackHE.GetValue()){
+					setTimeout(Delegate.create(this, EnableAddon), 1000, true, false);
+					return
+				}
 			default:
 				EnableAddon(false);
 		}
