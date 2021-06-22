@@ -1,5 +1,6 @@
 import com.GameInterface.Chat;
 import com.GameInterface.DistributedValue;
+import com.GameInterface.DistributedValueBase;
 import com.GameInterface.Game.BuffData;
 import com.GameInterface.Game.Character;
 import com.GameInterface.Game.TargetingInterface;
@@ -16,14 +17,13 @@ import com.Components.BuffCharge;
 
 class UtaBar extends UIComponent
 {
-	static var m_Enabled:Boolean;
+	static var modEnabled:Boolean;
 	private var m_HealthBar:MovieClip;
 	private var m_ShieldBar:MovieClip;
 	private var m_CastBar:MovieClip;
 	
 	private var m_Icon:MovieClip;
-	private var m_SisterlyBonds:TextField;
-	private var m_BuffCharge:BuffCharge;
+	private var m_BuffCharge:MovieClip;
 	
 	private var m_Border:MovieClip;
 	
@@ -35,16 +35,28 @@ class UtaBar extends UIComponent
 	
 	private var m_IntervalId:Number;
 	private var m_Increments:Number;
-	private var m_TotalFrames:Number; 
+	private var m_TotalFrames:Number;
 	private var m_StopFrame:Number;
 	private var m_ProgressBarType:Number;
 	private var m_Signals:SignalGroup;
 
 	private var m_MovieClipLoader:MovieClipLoader;
 	private var m_BlinkInterval:Number;
-	
-	static var DANGEROUSCASTS = [LDBFormat.LDBGetText(50210, 8963975), LDBFormat.LDBGetText(50210, 9114429)];
-	static var SOUNDCASTS = [LDBFormat.LDBGetText(50210, 8974889)];
+	private var m_SoundInterval:Number;
+
+	static var CASTS = [
+		[
+			LDBFormat.LDBGetText(50210, 8963975), // Honorable Combat
+			LDBFormat.LDBGetText(50210, 9114429) // Rabbit Blood
+		],
+		[
+			[LDBFormat.LDBGetText(50210, 8963975),"sound_fxpackage_GUI_keyboard_interface_note_1.xml", DistributedValue.Create("UtaMadre_HonorableSound")], // Honorable Combat
+			[LDBFormat.LDBGetText(50210, 8974889),"sound_fxpackage_beep_single.xml", DistributedValue.Create("UtaMadre_BombSound")] // Time Bomb
+		],
+		[
+			LDBFormat.LDBGetText(50210, 8963981) // Assassin's guile
+		]
+	];
 	static var SisterlyBonds = LDBFormat.LDBGetText(50210, 8963983);
 	static var m_Character:Character;
 	
@@ -114,6 +126,7 @@ class UtaBar extends UIComponent
 		m_Signals.DisconnectAll();
 		clearInterval(m_IntervalId);
 		clearInterval(m_BlinkInterval);
+		clearInterval(m_SoundInterval);
 		
 		m_Uta = uta;
 		_visible = (m_Uta != null);
@@ -160,9 +173,20 @@ class UtaBar extends UIComponent
 		
 		m_CastBar.m_Text.text = name;
 		
-		m_CastBar._visible = true;
-		for (var i in DANGEROUSCASTS){
-			if (DANGEROUSCASTS[i] == name){
+		if (DistributedValueBase.GetDValue("UtaMadre_ImportantCastsOnly")){
+			m_CastBar._visible = false;
+			for (var i in CASTS[2]){
+				if (CASTS[2] == name){
+					m_CastBar._visible = true;
+					break;
+				}
+			}
+		}else{
+			m_CastBar._visible = true;
+		}
+		for (var i in CASTS[0]){
+			if (CASTS[0][i] == name){
+				m_CastBar._visible = true;
 				clearInterval(m_BlinkInterval);
 				var colorTransform:ColorTransform = new ColorTransform();
 				colorTransform.rgb = 0xFFFFFF;
@@ -175,20 +199,23 @@ class UtaBar extends UIComponent
 					colorTransform.blueOffset += increment;
 					this.m_CastBar.m_ProgressBar.transform.colorTransform = colorTransform;
 				}), 50);
-				return;
+				break;
 			}
 		}
-		for (var i in SOUNDCASTS){
-			if (SOUNDCASTS[i] == name){
-				clearInterval(m_BlinkInterval);
-				m_CastBar.m_ProgressBar.transform.colorTransform = new ColorTransform();
-				m_BlinkInterval = setInterval(Delegate.create(this, function(){
-					m_Character.AddEffectPackage("sound_fxpackage_beep_single.xml");
-				}), 200);
-				return;
+		for (var i in CASTS[1]){
+			if (CASTS[1][i][0] == name){
+				m_CastBar._visible = true;
+				if(CASTS[1][i][2].GetValue()){
+					clearInterval(m_SoundInterval);
+					m_SoundInterval = setInterval(Delegate.create(this, function(){
+						m_Character.AddEffectPackage(CASTS[1][i][1]);
+					}), 600);
+				}
+				break;
 			}
 		}
 	}
+	
 	private function ExecuteCallback(): Void
 	{
 		if (m_Uta != null)
@@ -201,10 +228,12 @@ class UtaBar extends UIComponent
 			m_CastBar.m_ProgressBar.gotoAndStop(scaleNum);
 		}
 	}
+	
 	private function SlotSignalCommandEnded() : Void
 	{
 		clearInterval( m_IntervalId );
 		clearInterval(m_BlinkInterval);
+		clearInterval(m_SoundInterval);
 		m_CastBar.m_ProgressBar.transform.colorTransform = new ColorTransform();
 		m_CastBar._visible = false;
 		m_CastBar.m_ProgressBar.stop();
@@ -214,6 +243,7 @@ class UtaBar extends UIComponent
 	{
 		clearInterval( m_IntervalId );
 		clearInterval(m_BlinkInterval);
+		clearInterval(m_SoundInterval);
         m_CastBar.m_ProgressBar.transform.colorTransform = new ColorTransform();
 		m_CastBar.m_Text.text = "Interrupted!";
 		_global['setTimeout'](this, 'SlotSignalCommandEnded', 500);
@@ -221,44 +251,32 @@ class UtaBar extends UIComponent
 	
 	private function SlotBuffChange()
 	{
-		for (var buffId in m_Uta.m_BuffList)
-		{
-			var buff:BuffData = m_Uta.m_BuffList[buffId];
+		for (var i in m_Uta.m_BuffList){
+			var buff:BuffData = m_Uta.m_BuffList[i];
 			if (buff.m_Name == SisterlyBonds) // localized
 			{
-				if(buff.m_Icon != undefined && m_BuffCharge == undefined) {
-					this.attachMovie( "_BuffCharge", "m_BuffCharge", this.getNextHighestDepth() );
-					m_BuffCharge.SetMax( buff.m_MaxCounters );
-					m_BuffCharge.SetColor( 0x0000ff );
-					m_BuffCharge._xscale = m_BuffCharge._yscale = 160;
-					m_BuffCharge._x = 25;
-					m_BuffCharge._y = 79;
-				}
-				
-				m_BuffCharge.SetCharge( Math.max(1, buff.m_Count) );
+				m_BuffCharge.m_BuffText.text = string(buff.m_Count);
 				
 				switch(buff.m_Count)
 				{
 					case 0:
 					case 1:
-						Colors.ApplyColor(m_BuffCharge.i_Offset.i_PosLayer.i_ScaleLayer.i_MainLayer.i_Back.i_TintLayer, 0x33FF33); 
+						m_BuffCharge.m_BuffText.textColor = 0x33FF33;
 						break;
 					case 2:
-						Colors.ApplyColor(m_BuffCharge.i_Offset.i_PosLayer.i_ScaleLayer.i_MainLayer.i_Back.i_TintLayer, 0xFFCC00); 
+						m_BuffCharge.m_BuffText.textColor = 0xFFCC00;
 						break;
 					case 3:
-						Colors.ApplyColor(m_BuffCharge.i_Offset.i_PosLayer.i_ScaleLayer.i_MainLayer.i_Back.i_TintLayer, 0xFF3300); 
+						m_BuffCharge.m_BuffText.textColor = 0xFF3300;
 						break;
 					case 4:
-						Colors.ApplyColor(m_BuffCharge.i_Offset.i_PosLayer.i_ScaleLayer.i_MainLayer.i_Back.i_TintLayer, 0xFF0000);
+						m_BuffCharge.m_BuffText.textColor = 0xFF0000;
 						Chat.SignalShowFIFOMessage.Emit(m_UtaType + "-Uta enraged! BURN OR DIE!");
 						break;
 				}
 				return;
 			}
 		}
-		
-		m_SisterlyBonds.text = "?";//?
 	}
 	
 	private function SlotStatChanged()
@@ -277,7 +295,7 @@ class UtaBar extends UIComponent
 	// GUI EDIT MODE
 	private function SlotSetGUIEditMode(edit:Boolean)
 	{	
-		edit = edit && m_Enabled;
+		edit = edit && modEnabled;
 		
 		m_EditModeMask._visible = edit;
 		if (edit)
