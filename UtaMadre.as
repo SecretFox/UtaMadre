@@ -254,13 +254,13 @@ function SlotOffensiveTargetChanged(targetId:ID32)
 					if (d_markUta.GetValue()) MarkTarget(0, targetId);
 					if (!m_SUTA.GetUtaID().Equal(targetId)) m_SUTA.SetUta(target, 0x009900, "Blade-Uta");
 					break;
-				case 35795:
-				case 35695:
+				case 35794:
+				case 35693:
 					if (d_markUta.GetValue()) MarkTarget(1, targetId);
 					if (!m_BUTA.GetUtaID().Equal(targetId)) m_BUTA.SetUta(target, 0x851100, "Blood-Uta");
 					break;
-				case 35794:
-				case 35693:
+				case 35795:
+				case 35695:
 					if (d_markUta.GetValue()) MarkTarget(2, targetId);
 					if (!m_RUTA.GetUtaID().Equal(targetId)) m_RUTA.SetUta(target, 0x004D87, "Rifle-Uta");
 					break;
