@@ -220,24 +220,37 @@ function SaveMarks()
 	playerInventory.SignalItemAdded.Connect(SaveMarks, this);
 }
 
-function MarkTarget(num, targetId:ID32)
+function MarkTarget(num, targetId:ID32, target:Character)
 {
 	if (!Character.GetClientCharacter().GetOffensiveTarget().Equal(targetId)) return;
 	var playerInventory:Inventory = _root.backpack2.m_QuestInventory;
+	if (target["marked"]) return;
+	
 	switch (num)
 	{
 		case 0:
 			if (markerItems[0][0]) playerInventory.UseItem(InventoryItem(markerItems[0][0]).m_InventoryPos);
+			target["marked"] = true;
+			setTimeout(Delegate.create(this, ReleaseMarked), 120 * 1000, target);
 			break;
 		case 1:
 			if (markerItems[1][0]) playerInventory.UseItem(InventoryItem(markerItems[1][0]).m_InventoryPos);
+			target["marked"] = true;
+			setTimeout(Delegate.create(this, ReleaseMarked), 120 * 1000, target);
 			break;
 		case 2:
 			if (markerItems[2][0]) playerInventory.UseItem(InventoryItem(markerItems[2][0]).m_InventoryPos);
+			target["marked"] = true;
+			setTimeout(Delegate.create(this, ReleaseMarked), 120 * 1000, target);
 			break;
 		default:
 			break;
 	}
+}
+
+function ReleaseMarked(target:Character)
+{
+	target["marked"] = false;
 }
 
 function SlotOffensiveTargetChanged(targetId:ID32)
@@ -251,17 +264,17 @@ function SlotOffensiveTargetChanged(targetId:ID32)
 			{
 				case 35793:
 				case 35694:
-					if (d_markUta.GetValue()) MarkTarget(0, targetId);
+					if (d_markUta.GetValue()) MarkTarget(0, targetId, target);
 					if (!m_SUTA.GetUtaID().Equal(targetId)) m_SUTA.SetUta(target, 0x009900, "Blade-Uta");
 					break;
 				case 35794:
 				case 35693:
-					if (d_markUta.GetValue()) MarkTarget(1, targetId);
+					if (d_markUta.GetValue()) MarkTarget(1, targetId, target);
 					if (!m_BUTA.GetUtaID().Equal(targetId)) m_BUTA.SetUta(target, 0x851100, "Blood-Uta");
 					break;
 				case 35795:
 				case 35695:
-					if (d_markUta.GetValue()) MarkTarget(2, targetId);
+					if (d_markUta.GetValue()) MarkTarget(2, targetId, target);
 					if (!m_RUTA.GetUtaID().Equal(targetId)) m_RUTA.SetUta(target, 0x004D87, "Rifle-Uta");
 					break;
 			}
